@@ -9,6 +9,7 @@ import { createServer } from 'node:http'
 import graphRouter from './routes/graph.js'
 import gitRouter from './routes/git.js'
 import annotationRouter from './routes/annotations.js'
+import flowRouter from './routes/flow.js'
 import { setupWebSocket } from './ws.js'
 
 /** API port. High in the range so it does not collide with other tooling. */
@@ -24,6 +25,7 @@ app.use(express.json())
 app.use('/api', graphRouter)
 app.use('/api', gitRouter)
 app.use('/api', annotationRouter)
+app.use('/api', flowRouter)
 
 const server = createServer(app)
 setupWebSocket(server)

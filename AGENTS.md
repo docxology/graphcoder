@@ -68,9 +68,10 @@ CodeGraph cannot link `fetch()` calls to route handlers because the URL is a run
 | —     | ✅ Done | Three.js WebGL renderer replacing PixiJS (5 draw calls, handles 10k+ nodes)       |
 | 3     | ✅ Done | Annotation surface — draw-to-annotate, user-defined kinds, AI proposals           |
 | 3c    | ✅ Done | Consumer tooling — CLI, MCP server, PR stack UI                                   |
-| 4     | Planned | Projections (speculative sketching, projected ArchDiffs, git graph integration)   |
-| 5     | Planned | Prospective state engine (projections → CoW graph forks)                          |
-| 6     | Planned | Code synthesis engine (projection → ArchDiff → file changes → commit)             |
+| 3d    | Done    | Flow tracing — entry point discovery, call-path walk, flow-first UX               |
+| 4     | Planned | Projections + constraints (sketch changes, enforce rules, measure reach)          |
+| 5     | Planned | Prospective state engine (projections → CoW graph forks, validation)              |
+| 6     | Planned | Code synthesis engine (ArchDiff → file changes → commit)                          |
 | 7     | Planned | AI agent MCP interface (agents create annotations + projections)                  |
 
 See `~/.sovereign/membranes/personal/plans/graphcoder.md` for the full design.
@@ -156,6 +157,23 @@ Run with `node packages/mcp/dist/index.js` or register in MCP config as `graphco
 `NodeAnnotations` — reverse-navigation panel below the NodeInspector. When a node gets selected, shows all annotations whose `members` array contains that node's semantic ID. Click an annotation to select it on the canvas.
 
 `state/pr-stack.ts` — nested state slice under `state.prStack`. Uses `fetchPrStack` / `importPrStack` API wrappers in `api/git.ts` which hit `GET /api/git/pr-stack` and `POST /api/git/pr-stack/import`.
+
+## Flow tracing (Phase 3d)
+
+Two view modes toggled via the Flows/Graph buttons in the toolbar:
+
+- **Flow mode** — canvas starts empty. The EntryPointPicker shows discovered entry points (routes, components, exports, handlers). Click one to trace its call path forward. Multiple flows accumulate; nodes appearing in 2+ flows get convergence counts. The FlowPanel bar shows active flows as removable pills.
+- **Graph mode** — the full graph view (default). Switching back triggers a fresh `view_snapshot` from the server.
+
+Key files:
+
+- `packages/core/src/flow/` — types, entry-point discovery, forward/reverse tracer, convergence detection
+- `packages/server/src/routes/flow.ts` — REST endpoints (`/api/graph/entry-points`, `trace-flow`, `trace-flow-reverse`, `convergence`)
+- `packages/client/src/state/flow.ts` — FlowState slice, `recomputeFlowView` runs `computeView` client-side on merged flow nodes
+- `packages/client/src/components/EntryPointPicker.tsx` — flow mode landing UI
+- `packages/client/src/components/FlowPanel.tsx` — active flows bar
+
+The WS `view_snapshot` handler in `project.ts` guards against overwriting flow-computed view state when `viewMode === 'flow'` — only `fileNodes` pass through.
 
 ## Known gotchas
 

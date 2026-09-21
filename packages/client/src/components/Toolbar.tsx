@@ -1,6 +1,14 @@
 import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
-import { captureSnapshot, clearDiff, openProject, setGraphDirection, state, toggleGitBar } from '../state/store.js'
+import {
+  captureSnapshot,
+  clearDiff,
+  openProject,
+  setGraphDirection,
+  setViewMode,
+  state,
+  toggleGitBar
+} from '../state/store.js'
 import { cycleTheme, theme } from '../state/theme.js'
 import { SearchBar } from './SearchBar.js'
 
@@ -60,6 +68,39 @@ const ProjectInput: Component = () => {
   )
 }
 
+// ── View mode toggle ──────────────────────────────────────────────────────
+
+const ViewModeToggle: Component = () => (
+  <div
+    class="flex items-center gap-0.5 rounded border border-gray-200 dark:border-gray-700 overflow-hidden"
+    title="View mode"
+    data-testid="view-mode-toggle"
+  >
+    <button
+      class={`px-2.5 py-1 text-xs transition-colors ${
+        state.viewMode === 'flow'
+          ? "bg-blue-600 text-white"
+          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700"
+      }`}
+      onClick={() => setViewMode('flow')}
+      data-testid="view-mode-flow"
+    >
+      Flows
+    </button>
+    <button
+      class={`px-2.5 py-1 text-xs transition-colors ${
+        state.viewMode === 'graph'
+          ? "bg-blue-600 text-white"
+          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200 dark:hover:bg-gray-700"
+      }`}
+      onClick={() => setViewMode('graph')}
+      data-testid="view-mode-graph"
+    >
+      Graph
+    </button>
+  </div>
+)
+
 // ── Direction toggle ───────────────────────────────────────────────────────
 
 const DirectionToggle: Component<{ variant?: string }> = (props) => {
@@ -111,9 +152,10 @@ export const Toolbar: Component = () => {
 
         <ProjectInput />
 
-        {/* Desktop-only: direction + diff controls (hidden on mobile, shown on secondary row) */}
+        {/* Desktop-only: view mode, direction + diff controls */}
         <div class="hidden sm:flex items-center gap-3">
           <div class="h-4 border-l border-gray-300 dark:border-gray-600" />
+          <ViewModeToggle />
           <DirectionToggle />
           <div class="h-4 border-l border-gray-300 dark:border-gray-600" />
           <Show when={state.fileNodes.length > 0}>
@@ -179,6 +221,7 @@ export const Toolbar: Component = () => {
 
       {/* ── Secondary row — mobile only ── */}
       <div class="flex sm:hidden items-center gap-2 px-3 pb-2">
+        <ViewModeToggle />
         <DirectionToggle variant="mobile" />
         <Show when={state.fileNodes.length > 0}>
           <button

@@ -171,6 +171,16 @@ export type {
 export type { ResolutionResult } from './annotations/resolve.js'
 export type { ExtractedPath } from './annotations/extract.js'
 
+// Flow tracing
+export type { EntryPoint, TracedFlow, Branch, FlowTracerConfig, NoiseFilter } from './flow/index.js'
+export {
+  DEFAULT_FLOW_CONFIG,
+  discoverEntryPoints,
+  traceFlow,
+  traceFlowReverse,
+  detectConvergence
+} from './flow/index.js'
+
 export { buildDiffIdMap, normalizeSignature, nodeSemanticId, semanticId } from './identity.js'
 export type { FileGroup, ViewParams, ViewResult } from './view.js'
 export { computeView, DEFAULT_VIEW_PARAMS, globToRegex } from './view.js'

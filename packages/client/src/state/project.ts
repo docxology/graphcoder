@@ -131,6 +131,20 @@ export async function initFromUrl(): Promise<void> {
     const { loadPrStack } = await import('./pr-stack.js')
     await loadPrStack(prBaseParam, prTipParam)
   }
+
+  // Restore flow view mode and traced flows from URL.
+  const viewParam = params.get('view')
+  const flowsParam = params.get('flows')
+  if (viewParam === 'flow' && state.projectRoot) {
+    const { setViewMode, traceFromEntryPoint } = await import('./flow.js')
+    setViewMode('flow')
+    if (flowsParam) {
+      const nodeIds = flowsParam.split(',').filter(Boolean)
+      for (const id of nodeIds) {
+        await traceFromEntryPoint(id)
+      }
+    }
+  }
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
@@ -226,8 +240,9 @@ export function connectWebSocket(): void {
                 fileNodes: data.fileNodes ?? state.savedView!.fileNodes
               })
             })
+          } else if (state.viewMode === 'flow') {
+            if (data.fileNodes !== undefined) setState('fileNodes', data.fileNodes)
           } else {
-            // No diff active — update the live display directly.
             batch(() => {
               if (data.nodes !== undefined) setState('viewNodes', data.nodes)
               if (data.edges !== undefined) setState('viewEdges', data.edges)

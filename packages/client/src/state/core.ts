@@ -11,6 +11,8 @@ import type { SearchState } from './search.js'
 import type { SelectionState } from './selection.js'
 import type { AnnotationsState } from './annotations.js'
 import { annotationsInitial } from './annotations.js'
+import type { FlowState } from './flow.js'
+import { flowInitial } from './flow.js'
 import type { PrStackState } from './pr-stack.js'
 import { prStackInitial } from './pr-stack.js'
 import type { TemporalState } from './temporal.js'
@@ -30,7 +32,8 @@ export type AppState = ProjectState &
   SearchState &
   HierarchyState &
   TemporalState &
-  AnnotationsState & {
+  AnnotationsState &
+  FlowState & {
     prStack: PrStackState
   }
 
@@ -95,6 +98,9 @@ export const [state, setState] = createStore<AppState>({
 
   // Annotations
   ...annotationsInitial,
+
+  // Flow tracing
+  ...flowInitial,
 
   // PR Stack
   prStack: prStackInitial

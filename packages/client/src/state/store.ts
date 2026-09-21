@@ -113,6 +113,18 @@ export {
 } from './annotations.js'
 export type { AnnotationsState } from './annotations.js'
 
+// Section: Flow tracing
+export {
+  setViewMode,
+  loadEntryPoints,
+  traceFromEntryPoint,
+  traceReverse,
+  removeFlow,
+  clearFlows,
+  recomputeFlowView
+} from './flow.js'
+export type { FlowState, ViewMode } from './flow.js'
+
 // Section: PR Stack
 export { loadPrStack, importPrAnnotations, setActivePr, nextPr, prevPr, clearPrStack } from './pr-stack.js'
 export type { PrInfo, PrStackState } from './pr-stack.js'

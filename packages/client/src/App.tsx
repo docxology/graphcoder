@@ -10,11 +10,14 @@ import { NodeInspector } from './components/NodeInspector.js'
 import { PrStackBar } from './components/PrStackBar.js'
 import { readLayoutSize, saveLayoutSize } from './components/ResizeHandle.js'
 import { Toolbar } from './components/Toolbar.js'
+import { EntryPointPicker } from './components/EntryPointPicker.js'
+import { FlowPanel } from './components/FlowPanel.js'
 import type { ViewParams } from '@graphcoder/core'
 import {
   clearDiff,
   connectWebSocket,
   initFromUrl,
+  loadEntryPoints,
   nextPr,
   prevPr,
   refilterDiffView,
@@ -172,9 +175,8 @@ export default function App() {
     // Re-filter the diff view when a temporal diff occupies the display.
     // No-ops when no raw diff data exists (no diff active).
     refilterDiffView(params)
-    // Always send to the server — when savedView exists the WS handler
-    // routes the response into savedView so the live view restores
-    // correctly when the diff clears.
+    // In flow mode, the view comes from traced flows (local computation).
+    // Still send to the server so savedView stays current for mode switches.
     sendViewRequest(params)
   })
 
@@ -242,6 +244,13 @@ export default function App() {
     if (state.projectRoot) {
       void loadKinds()
       void loadAnnotations()
+    }
+  })
+
+  // Load entry points when switching to flow mode (or when a project opens in flow mode)
+  createEffect(() => {
+    if (state.projectRoot && state.viewMode === 'flow' && state.entryPoints.length === 0) {
+      void loadEntryPoints()
     }
   })
 
@@ -347,6 +356,7 @@ export default function App() {
   return (
     <div class="flex flex-col h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-white" data-testid="app">
       <Toolbar />
+      <FlowPanel />
       <GitGraph />
 
       <Show when={state.error}>
@@ -415,7 +425,9 @@ export default function App() {
 
         {/* Centre column — canvas + PR bar + node inspector at the bottom */}
         <div class="flex flex-col flex-1 overflow-hidden min-h-0">
-          <GraphCanvas />
+          <Show when={state.viewMode !== 'flow' || state.tracedFlows.length > 0} fallback={<EntryPointPicker />}>
+            <GraphCanvas />
+          </Show>
           <PrStackBar />
           <Show when={state.selectedNodeId}>
             <NodeInspector />
