@@ -68,7 +68,7 @@ CodeGraph cannot link `fetch()` calls to route handlers because the URL is a run
 | —     | ✅ Done | Three.js WebGL renderer replacing PixiJS (5 draw calls, handles 10k+ nodes)       |
 | 3     | ✅ Done | Annotation surface — draw-to-annotate, user-defined kinds, AI proposals           |
 | 3c    | ✅ Done | Consumer tooling — CLI, MCP server, PR stack UI                                   |
-| 3d    | Done    | Flow tracing — entry point discovery, call-path walk, flow-first UX               |
+| 3d    | ✅ Done | Flow tracing — entry points, call-path walk, Monaco inspector, navigation         |
 | 4     | Planned | Projections + constraints (sketch changes, enforce rules, measure reach)          |
 | 5     | Planned | Prospective state engine (projections → CoW graph forks, validation)              |
 | 6     | Planned | Code synthesis engine (ArchDiff → file changes → commit)                          |
@@ -174,6 +174,24 @@ Key files:
 - `packages/client/src/components/FlowPanel.tsx` — active flows bar
 
 The WS `view_snapshot` handler in `project.ts` guards against overwriting flow-computed view state when `viewMode === 'flow'` — only `fileNodes` pass through.
+
+### Node inspector
+
+The bottom panel shows detail for the selected node. Metadata on the left (signature, docs, edge counts); source code on the right via Monaco editor.
+
+- **Monaco code viewer** (`CodeViewer.tsx`) — read-only editor with automatic language detection from file extension, dark/light theme support. Web worker setup via `import.meta.url`.
+- **Cmd/Ctrl+click navigation** — clicking an identifier in the code viewer while holding the modifier key searches the graph for a matching node and navigates to it. Prefers exact name matches over fuzzy results.
+- **Back/forward history** — browser-style navigation stack in `selection.ts`. ← → buttons in the inspector header. Uses a reactive signal (`navVersion`) so button enabled/disabled state updates reactively. History follows browser semantics — new selections truncate forward entries.
+- **Block expansion** — `expandToBlock()` in `routes/graph.ts` handles CodeGraph route handlers stored with `startLine === endLine`. Reads the source file and scans forward tracking brace depth to return the full callback body.
+
+### Layout
+
+- **Dynamic node widths** — `nodeWidth(name)` in `layout/elk.ts` sizes boxes proportionally (7px/char + 80px padding, min 120px). All ELK layout tiers use per-node widths.
+- **Full labels** — no label truncation. `ThreeRenderer` passes `maxChars=0` to `pushLabel`, displaying complete node names.
+
+### Flow deduplication
+
+`traceFromEntryPoint` early-returns if a flow with the same entry node already exists. Prevents duplicate flows from URL restoration or repeated calls.
 
 ## Known gotchas
 
