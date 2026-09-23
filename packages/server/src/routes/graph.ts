@@ -1,11 +1,33 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { graphService } from '../codegraph/service.js'
 import { broadcastGraphUpdate } from '../ws.js'
 import { openProjectSchema, searchQuerySchema } from '../schemas/graph.js'
 import type { Node } from '@colbymchenry/codegraph'
 
 const router = Router()
+
+function expandToBlock(lines: string[], startLine: number): string {
+  const startIdx = startLine - 1
+  if (startIdx < 0 || startIdx >= lines.length) return lines[startIdx] ?? ''
+
+  const first = lines[startIdx]!
+  if (!first.includes('{') && !first.includes('=>')) return first
+
+  let depth = 0
+  let endIdx = startIdx
+  for (let i = startIdx; i < lines.length; i++) {
+    for (const ch of lines[i]!) {
+      if (ch === '{') depth++
+      else if (ch === '}') depth--
+    }
+    endIdx = i
+    if (depth <= 0 && i > startIdx) break
+  }
+  return lines.slice(startIdx, endIdx + 1).join('\n')
+}
 
 // POST /projects/open
 router.post('/projects/open', async (req: Request, res: Response) => {
@@ -124,7 +146,14 @@ router.get('/nodes/:nodeId', async (req: Request, res: Response) => {
 
     const incoming = graphService.getIncomingEdgesAugmented(nodeId)
     const outgoing = graphService.getOutgoingEdgesAugmented(nodeId)
-    const code = await cg.getCode(nodeId)
+    let code = await cg.getCode(nodeId)
+
+    if (node.startLine === node.endLine && node.filePath) {
+      try {
+        const src = await readFile(join(graphService.getProjectRoot(), node.filePath), 'utf-8')
+        code = expandToBlock(src.split('\n'), node.startLine)
+      } catch {}
+    }
 
     res.json({ node, incoming, outgoing, code })
   } catch (err) {
