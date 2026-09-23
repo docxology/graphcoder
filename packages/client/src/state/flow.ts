@@ -64,6 +64,7 @@ export async function loadEntryPoints(): Promise<void> {
 }
 
 export async function traceFromEntryPoint(nodeId: string): Promise<void> {
+  if (state.tracedFlows.some((f) => f.entryNodeId === nodeId)) return
   setState('isTracing', true)
   setState('flowError', null)
   try {
