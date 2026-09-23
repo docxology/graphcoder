@@ -38,8 +38,14 @@ const LARGE_GRAPH_OVERRIDES: Record<string, string> = {
   'elk.layered.considerModelOrder.strategy': 'NONE'
 }
 
-const NODE_WIDTH = 160
+const NODE_MIN_WIDTH = 120
+const NODE_CHAR_WIDTH = 7
+const NODE_PAD_X = 80
 const NODE_HEIGHT = 40
+
+function nodeWidth(name: string): number {
+  return Math.max(NODE_MIN_WIDTH, name.length * NODE_CHAR_WIDTH + NODE_PAD_X)
+}
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -147,7 +153,7 @@ async function layoutFlat(
   const validEdges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
   const edgeKindMap = buildEdgeKindMap(validEdges)
 
-  const elkNodes: ElkNode[] = nodes.map((n) => ({ id: n.id, width: NODE_WIDTH, height: NODE_HEIGHT }))
+  const elkNodes: ElkNode[] = nodes.map((n) => ({ id: n.id, width: nodeWidth(n.name), height: NODE_HEIGHT }))
   const elkEdges: ElkExtendedEdge[] = validEdges.map((e, i) => ({
     id: `e${i}`,
     sources: [e.source],
@@ -173,7 +179,7 @@ async function layoutFlat(
   for (const child of layouted.children ?? []) {
     const x = child.x ?? 0
     const y = child.y ?? 0
-    const w = child.width ?? NODE_WIDTH
+    const w = child.width ?? NODE_MIN_WIDTH
     const h = child.height ?? NODE_HEIGHT
     resultNodes.set(child.id, { id: child.id, x, y, width: w, height: h })
     if (x + w > maxX) maxX = x + w
@@ -232,6 +238,7 @@ async function layoutGrouped(
   nodeIds: Set<string>
 ): Promise<LayoutResult> {
   const isLarge = nodes.length >= LARGE_GRAPH_THRESHOLD
+  const nodeNameMap = new Map<string, string>(nodes.map((n) => [n.id, n.name]))
   // ── Build group registry ──────────────────────────────────────────────────
 
   // All top-level groups (fileGroups param) and their sub-groups.
@@ -311,7 +318,7 @@ async function layoutGrouped(
   // Nodes that don't belong to any group: rendered flat at root level
   const ungroupedFlatNodes: ElkNode[] = nodes
     .filter((n) => !nodeToTopGroup.has(n.id))
-    .map((n) => ({ id: n.id, width: NODE_WIDTH, height: NODE_HEIGHT }))
+    .map((n) => ({ id: n.id, width: nodeWidth(n.name), height: NODE_HEIGHT }))
 
   // ── Determine layout tier ─────────────────────────────────────────────────
   //
@@ -375,7 +382,7 @@ async function layoutGrouped(
   function buildFileElkNode(fg: FileGroup, innerDir: string): ElkNode | null {
     const leafChildren: ElkNode[] = fg.childIds
       .filter((id) => nodeIds.has(id))
-      .map((id) => ({ id, width: NODE_WIDTH, height: NODE_HEIGHT }))
+      .map((id) => ({ id, width: nodeWidth(nodeNameMap.get(id) ?? id), height: NODE_HEIGHT }))
 
     const subGroupElkNodes: ElkNode[] = []
     for (const sg of fg.childGroups ?? []) {
@@ -391,23 +398,16 @@ async function layoutGrouped(
           'elk.spacing.nodeNode': '16',
           'elk.layered.spacing.nodeNodeBetweenLayers': '20'
         },
-        children: sgLeaves.map((id) => ({ id, width: NODE_WIDTH, height: NODE_HEIGHT }))
+        children: sgLeaves.map((id) => ({ id, width: nodeWidth(nodeNameMap.get(id) ?? id), height: NODE_HEIGHT }))
       })
     }
 
     const allChildren = [...leafChildren, ...subGroupElkNodes]
     if (allChildren.length === 0) {
       if (fg.collapsed) {
-        // Collapsed container: no children, but the node must still appear in ELK
-        // so that promoted edges (child → container) can be routed to it.
-        // A plain leaf node of fixed size achieves this — the renderer still
-        // displays it as a container box (it's in topGroupMap).
-        // Height is doubled vs a regular node (80 instead of 40) so collapsed chips
-        // remain legible at low zoom levels — at zoom ≈ 0.08 a 40-unit chip renders
-        // as a ~3 px hairline, making edges appear to terminate at empty space.
-        return { id: fg.id, width: NODE_WIDTH * 2, height: NODE_HEIGHT * 2 }
+        return { id: fg.id, width: NODE_MIN_WIDTH * 2, height: NODE_HEIGHT * 2 }
       }
-      return null // Genuinely empty expanded group — skip
+      return null
     }
 
     return {
@@ -436,7 +436,7 @@ async function layoutGrouped(
     for (const child of elkFileNode.children ?? []) {
       const cx = absX + (child.x ?? 0)
       const cy = absY + (child.y ?? 0)
-      const cw = child.width ?? NODE_WIDTH
+      const cw = child.width ?? NODE_MIN_WIDTH
       const ch = child.height ?? NODE_HEIGHT
 
       if (subGroupMap.has(child.id)) {
@@ -457,7 +457,7 @@ async function layoutGrouped(
             id: leaf.id,
             x: cx + (leaf.x ?? 0),
             y: cy + (leaf.y ?? 0),
-            width: leaf.width ?? NODE_WIDTH,
+            width: leaf.width ?? NODE_MIN_WIDTH,
             height: leaf.height ?? NODE_HEIGHT
           })
         }
@@ -545,7 +545,7 @@ async function layoutGrouped(
     for (const child of flat2Layouted.children ?? []) {
       const cx = child.x ?? 0
       const cy = child.y ?? 0
-      const cw = child.width ?? NODE_WIDTH
+      const cw = child.width ?? NODE_MIN_WIDTH
       const ch = child.height ?? NODE_HEIGHT
 
       if (topGroupMap.has(child.id)) {
@@ -767,7 +767,7 @@ async function layoutGrouped(
     for (const rootChild of pkg4Layouted.children ?? []) {
       const rx = rootChild.x ?? 0
       const ry = rootChild.y ?? 0
-      const rw = rootChild.width ?? NODE_WIDTH
+      const rw = rootChild.width ?? NODE_MIN_WIDTH
       const rh = rootChild.height ?? NODE_HEIGHT
       if (rx + rw > pkg4MaxX) pkg4MaxX = rx + rw
       if (ry + rh > pkg4MaxY) pkg4MaxY = ry + rh
@@ -790,7 +790,7 @@ async function layoutGrouped(
         for (const dirChild of rootChild.children ?? []) {
           const dx = rx + (dirChild.x ?? 0)
           const dy = ry + (dirChild.y ?? 0)
-          const dw = dirChild.width ?? NODE_WIDTH
+          const dw = dirChild.width ?? NODE_MIN_WIDTH
           const dh = dirChild.height ?? NODE_HEIGHT
 
           if (dirIdSet.has(dirChild.id)) {
@@ -809,7 +809,7 @@ async function layoutGrouped(
             for (const fileChild of dirChild.children ?? []) {
               const fx = dx + (fileChild.x ?? 0)
               const fy = dy + (fileChild.y ?? 0)
-              const fw = fileChild.width ?? NODE_WIDTH
+              const fw = fileChild.width ?? NODE_MIN_WIDTH
               const fh = fileChild.height ?? NODE_HEIGHT
 
               if (topGroupMap.has(fileChild.id)) {
@@ -847,7 +847,7 @@ async function layoutGrouped(
         for (const fileChild of rootChild.children ?? []) {
           const fx = rx + (fileChild.x ?? 0)
           const fy = ry + (fileChild.y ?? 0)
-          const fw = fileChild.width ?? NODE_WIDTH
+          const fw = fileChild.width ?? NODE_MIN_WIDTH
           const fh = fileChild.height ?? NODE_HEIGHT
           if (topGroupMap.has(fileChild.id)) {
             const fg = topGroupMap.get(fileChild.id)!
@@ -1077,7 +1077,7 @@ async function layoutGrouped(
   for (const rootChild of layouted.children ?? []) {
     const rx = rootChild.x ?? 0
     const ry = rootChild.y ?? 0
-    const rw = rootChild.width ?? NODE_WIDTH
+    const rw = rootChild.width ?? NODE_MIN_WIDTH
     const rh = rootChild.height ?? NODE_HEIGHT
 
     if (dirIdSet.has(rootChild.id)) {
@@ -1097,7 +1097,7 @@ async function layoutGrouped(
       for (const fileChild of rootChild.children ?? []) {
         const fx = rx + (fileChild.x ?? 0)
         const fy = ry + (fileChild.y ?? 0)
-        const fw = fileChild.width ?? NODE_WIDTH
+        const fw = fileChild.width ?? NODE_MIN_WIDTH
         const fh = fileChild.height ?? NODE_HEIGHT
 
         if (topGroupMap.has(fileChild.id)) {

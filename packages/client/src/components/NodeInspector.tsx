@@ -1,6 +1,18 @@
 import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
-import { clearFocus, clearSelection, setFocus, state } from '../state/store.js'
+import {
+  canGoBack,
+  canGoForward,
+  clearFocus,
+  clearSelection,
+  goBack,
+  goForward,
+  selectNode,
+  setFocus,
+  state
+} from '../state/store.js'
+import { searchNodes } from '../api/graph.js'
+import { CodeViewer } from './CodeViewer.js'
 import { readLayoutSize, ResizeHandle, saveLayoutSize } from './ResizeHandle.js'
 
 // ── NodeInspector (bottom panel) ──────────────────────────────────────────────
@@ -15,6 +27,17 @@ import { readLayoutSize, ResizeHandle, saveLayoutSize } from './ResizeHandle.js'
 export const NodeInspector: Component = () => {
   const [collapsed, setCollapsed] = createSignal(false)
   const [expandedHeight, setExpandedHeight] = createSignal(readLayoutSize('inspectorHeight', 208))
+
+  const navigateToSymbol = async (symbol: string) => {
+    try {
+      const { results } = await searchNodes(symbol)
+      const exact = results.find((r) => r.node.name === symbol)
+      const target = exact ?? results[0]
+      if (target && target.node.id !== state.selectedNodeId) {
+        void selectNode(target.node.id)
+      }
+    } catch {}
+  }
 
   return (
     <div
@@ -80,7 +103,26 @@ export const NodeInspector: Component = () => {
               </Show>
 
               <div class="ml-auto flex items-center gap-1 flex-shrink-0">
-                {/* Focus toggle */}
+                <button
+                  class="text-xs px-1.5 py-0.5 rounded text-gray-400 dark:text-gray-500
+                    hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700
+                    disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+                  disabled={!canGoBack()}
+                  onClick={() => void goBack()}
+                  title="Go back"
+                >
+                  ←
+                </button>
+                <button
+                  class="text-xs px-1.5 py-0.5 rounded text-gray-400 dark:text-gray-500
+                    hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700
+                    disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+                  disabled={!canGoForward()}
+                  onClick={() => void goForward()}
+                  title="Go forward"
+                >
+                  →
+                </button>
                 <button
                   class={`text-xs px-2 py-0.5 rounded border transition-colors ${
                     state.focusedNodeId === detail().node.id
@@ -142,10 +184,8 @@ export const NodeInspector: Component = () => {
 
                 {/* Right — source code */}
                 <Show when={detail().code}>
-                  <div class="flex-1 overflow-auto px-3 py-2" data-testid="code-preview">
-                    <pre class="text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                      {detail().code}
-                    </pre>
+                  <div class="flex-1 overflow-hidden">
+                    <CodeViewer code={detail().code!} filePath={detail().node.filePath} onNavigate={navigateToSymbol} />
                   </div>
                 </Show>
               </div>

@@ -1,4 +1,5 @@
 import type { GraphEdge, NodeDetail } from '@graphcoder/core'
+import { createSignal } from 'solid-js'
 import * as api from '../api/graph.js'
 import { state, setState } from './core.js'
 
@@ -12,6 +13,54 @@ export interface SelectionState {
 
 /** Abort controller for the current in-flight detail fetch. */
 let detailController: AbortController | null = null
+
+// ── Navigation history ───────────────────────────────────────────────────────
+
+const navHistory: string[] = []
+let navCursor = -1
+let navFromHistory = false
+const [navVersion, setNavVersion] = createSignal(0)
+function bumpNav(): void {
+  setNavVersion((v) => v + 1)
+}
+
+export function canGoBack(): boolean {
+  navVersion()
+  return navCursor > 0
+}
+
+export function canGoForward(): boolean {
+  navVersion()
+  return navCursor < navHistory.length - 1
+}
+
+export async function goBack(): Promise<void> {
+  if (!canGoBack()) return
+  navCursor--
+  navFromHistory = true
+  bumpNav()
+  await selectNode(navHistory[navCursor]!)
+}
+
+export async function goForward(): Promise<void> {
+  if (!canGoForward()) return
+  navCursor++
+  navFromHistory = true
+  bumpNav()
+  await selectNode(navHistory[navCursor]!)
+}
+
+function pushHistory(nodeId: string): void {
+  if (navFromHistory) {
+    navFromHistory = false
+    return
+  }
+  if (navHistory[navCursor] === nodeId) return
+  navHistory.splice(navCursor + 1)
+  navHistory.push(nodeId)
+  navCursor = navHistory.length - 1
+  bumpNav()
+}
 
 /**
  * Build a NodeDetail from the local diff view data.
@@ -56,6 +105,7 @@ export async function selectNode(nodeId: string): Promise<void> {
   const controller = new AbortController()
   detailController = controller
 
+  pushHistory(nodeId)
   setState('selectedNodeId', nodeId)
   setState('selectedNodeDetail', null)
   setState('isLoadingDetail', true)

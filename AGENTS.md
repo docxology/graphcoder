@@ -67,9 +67,11 @@ CodeGraph cannot link `fetch()` calls to route handlers because the URL is a run
 | 2     | ✅ Done | Temporal mapper (Git history → per-commit diffs via worktrees, SQLite cache, SSE) |
 | —     | ✅ Done | Three.js WebGL renderer replacing PixiJS (5 draw calls, handles 10k+ nodes)       |
 | 3     | ✅ Done | Annotation surface — draw-to-annotate, user-defined kinds, AI proposals           |
-| 4     | Planned | Projections (speculative sketching, projected ArchDiffs, git graph integration)   |
-| 5     | Planned | Prospective state engine (projections → CoW graph forks)                          |
-| 6     | Planned | Code synthesis engine (projection → ArchDiff → file changes → commit)             |
+| 3c    | ✅ Done | Consumer tooling — CLI, MCP server, PR stack UI                                   |
+| 3d    | ✅ Done | Flow tracing — entry points, call-path walk, Monaco inspector, navigation         |
+| 4     | Planned | Projections + constraints (sketch changes, enforce rules, measure reach)          |
+| 5     | Planned | Prospective state engine (projections → CoW graph forks, validation)              |
+| 6     | Planned | Code synthesis engine (ArchDiff → file changes → commit)                          |
 | 7     | Planned | AI agent MCP interface (agents create annotations + projections)                  |
 
 See `~/.sovereign/membranes/personal/plans/graphcoder.md` for the full design.
@@ -127,6 +129,69 @@ The user never picks a shape from a menu — the drawing gesture in `GraphCanvas
 - `⌘/Ctrl+K` opens `CommandPalette.tsx` (subsequence fuzzy match over commands, annotations, and kinds).
 - `⌘/Ctrl+Z` / `⇧⌘Z` — undo/redo. The stack lives in `state/annotations.ts`; entries record create/delete/update snapshots and replay through the same API the UI uses.
 - `KindInput.tsx` is the only naming surface — inline at the shape anchor, never a modal.
+
+## CLI (`@graphcoder/cli`)
+
+`packages/cli/` — standalone CLI for CI and agent use. Commands:
+
+```bash
+graphcoder check [path]          # annotation health — reports stale member references
+graphcoder digest [path] --json  # structured annotation digest grouped by kind
+graphcoder import-prs --base dev --tip feature-branch  # import PR stack as proposed annotations
+```
+
+Exit codes: 0 = success, 1 = issues found, 2 = error. Requires `.graphcoder/` (CodeGraph index) in the project.
+
+## MCP server (`@graphcoder/mcp`)
+
+`packages/mcp/` — wraps CLI commands as MCP tools over stdio transport.
+
+Tools: `graphcoder_check`, `graphcoder_digest`, `graphcoder_import_prs`. Each takes `projectRoot` (absolute path). The import tool also takes `base` and `tip` git refs.
+
+Run with `node packages/mcp/dist/index.js` or register in MCP config as `graphcoder-mcp`.
+
+## PR stack UI
+
+`PrStackBar` — horizontal bar below the canvas showing stacked PRs as coloured segments. Click a segment to select that PR. `← →` keys step through the stack. "Import" button converts the stack into proposed annotations with `kind=pr`.
+
+`NodeAnnotations` — reverse-navigation panel below the NodeInspector. When a node gets selected, shows all annotations whose `members` array contains that node's semantic ID. Click an annotation to select it on the canvas.
+
+`state/pr-stack.ts` — nested state slice under `state.prStack`. Uses `fetchPrStack` / `importPrStack` API wrappers in `api/git.ts` which hit `GET /api/git/pr-stack` and `POST /api/git/pr-stack/import`.
+
+## Flow tracing (Phase 3d)
+
+Two view modes toggled via the Flows/Graph buttons in the toolbar:
+
+- **Flow mode** — canvas starts empty. The EntryPointPicker shows discovered entry points (routes, components, exports, handlers). Click one to trace its call path forward. Multiple flows accumulate; nodes appearing in 2+ flows get convergence counts. The FlowPanel bar shows active flows as removable pills.
+- **Graph mode** — the full graph view (default). Switching back triggers a fresh `view_snapshot` from the server.
+
+Key files:
+
+- `packages/core/src/flow/` — types, entry-point discovery, forward/reverse tracer, convergence detection
+- `packages/server/src/routes/flow.ts` — REST endpoints (`/api/graph/entry-points`, `trace-flow`, `trace-flow-reverse`, `convergence`)
+- `packages/client/src/state/flow.ts` — FlowState slice, `recomputeFlowView` runs `computeView` client-side on merged flow nodes
+- `packages/client/src/components/EntryPointPicker.tsx` — flow mode landing UI
+- `packages/client/src/components/FlowPanel.tsx` — active flows bar
+
+The WS `view_snapshot` handler in `project.ts` guards against overwriting flow-computed view state when `viewMode === 'flow'` — only `fileNodes` pass through.
+
+### Node inspector
+
+The bottom panel shows detail for the selected node. Metadata on the left (signature, docs, edge counts); source code on the right via Monaco editor.
+
+- **Monaco code viewer** (`CodeViewer.tsx`) — read-only editor with automatic language detection from file extension, dark/light theme support. Web worker setup via `import.meta.url`.
+- **Cmd/Ctrl+click navigation** — clicking an identifier in the code viewer while holding the modifier key searches the graph for a matching node and navigates to it. Prefers exact name matches over fuzzy results.
+- **Back/forward history** — browser-style navigation stack in `selection.ts`. ← → buttons in the inspector header. Uses a reactive signal (`navVersion`) so button enabled/disabled state updates reactively. History follows browser semantics — new selections truncate forward entries.
+- **Block expansion** — `expandToBlock()` in `routes/graph.ts` handles CodeGraph route handlers stored with `startLine === endLine`. Reads the source file and scans forward tracking brace depth to return the full callback body.
+
+### Layout
+
+- **Dynamic node widths** — `nodeWidth(name)` in `layout/elk.ts` sizes boxes proportionally (7px/char + 80px padding, min 120px). All ELK layout tiers use per-node widths.
+- **Full labels** — no label truncation. `ThreeRenderer` passes `maxChars=0` to `pushLabel`, displaying complete node names.
+
+### Flow deduplication
+
+`traceFromEntryPoint` early-returns if a flow with the same entry node already exists. Prevents duplicate flows from URL restoration or repeated calls.
 
 ## Known gotchas
 

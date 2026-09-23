@@ -43,7 +43,7 @@ export { search } from './search.js'
 export type { SearchState } from './search.js'
 
 // Section: Selection
-export { clearSelection, selectNode } from './selection.js'
+export { canGoBack, canGoForward, clearSelection, goBack, goForward, selectNode } from './selection.js'
 export type { SelectionState } from './selection.js'
 
 // Section: Storage  (PersistedFilters lives here — it owns the serialisation schema)
@@ -112,6 +112,22 @@ export {
   canRedo
 } from './annotations.js'
 export type { AnnotationsState } from './annotations.js'
+
+// Section: Flow tracing
+export {
+  setViewMode,
+  loadEntryPoints,
+  traceFromEntryPoint,
+  traceReverse,
+  removeFlow,
+  clearFlows,
+  recomputeFlowView
+} from './flow.js'
+export type { FlowState, ViewMode } from './flow.js'
+
+// Section: PR Stack
+export { loadPrStack, importPrAnnotations, setActivePr, nextPr, prevPr, clearPrStack } from './pr-stack.js'
+export type { PrInfo, PrStackState } from './pr-stack.js'
 
 // Utilities
 export { syncUrlParams } from './url.js'

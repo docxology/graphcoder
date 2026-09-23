@@ -82,6 +82,12 @@ export interface ViewParams {
   /** File paths / dir prefixes whose groups show children expanded in ELK layout. */
   expandedGroups: string[]
   focusedNodeId: string | null
+  /**
+   * When non-empty, only nodes whose filePath appears in this set pass the
+   * filter. Acts as a whitelist — everything outside the set gets excluded
+   * before layout. Used by the PR stack to scope the graph to touched files.
+   */
+  scopeFiles: string[]
 }
 
 /** Default params sent to the server before the client has loaded any local prefs. */
@@ -98,7 +104,8 @@ export const DEFAULT_VIEW_PARAMS: ViewParams = {
   groupByContract: false,
   groupByPackage: false,
   expandedGroups: [],
-  focusedNodeId: null
+  focusedNodeId: null,
+  scopeFiles: []
 }
 
 // ── ViewResult ────────────────────────────────────────────────────────────────
@@ -226,6 +233,7 @@ function isGroupExpanded(filePath: string | undefined, expandedGroups: string[])
 
 function collectDescendants(nodeId: string, containsChildren: Map<string, string[]>, out: Set<string>): void {
   for (const child of containsChildren.get(nodeId) ?? []) {
+    if (out.has(child)) continue // cycle guard — diff views can merge `contains` edges from both snapshots
     out.add(child)
     collectDescendants(child, containsChildren, out)
   }
@@ -258,7 +266,8 @@ export function computeView(allNodes: GraphNode[], allEdges: GraphEdge[], params
     groupByContract,
     groupByPackage,
     expandedGroups,
-    focusedNodeId
+    focusedNodeId,
+    scopeFiles
   } = params
 
   // Always collect file nodes for the hierarchy panel — independent of view params.
@@ -277,26 +286,41 @@ export function computeView(allNodes: GraphNode[], allEdges: GraphEdge[], params
   let nodes = allNodes.filter((n) => !hiddenKindSet.has(n.kind))
   let nodeIds = new Set(nodes.map((n) => n.id))
 
-  // hiddenPaths filter (prefix-match semantics)
-  if (hiddenPaths.length > 0) {
-    const hSet = new Set(hiddenPaths)
-    nodes = nodes.filter((n) => !isHiddenByPath(n, hSet))
-    nodeIds = new Set(nodes.map((n) => n.id))
-  }
-
-  // excludePatterns filter
-  if (excludePatterns.trim()) {
-    const regexes = excludePatterns
-      .split(',')
-      .map(globToRegex)
-      .filter((r): r is RegExp => r !== null)
-    if (regexes.length > 0) {
-      nodes = nodes.filter((n) => {
-        const fp = n.filePath ?? ''
-        return !regexes.some((r) => r.test(fp))
-      })
+  // When scopeFiles provides a whitelist (e.g. PR review mode), it becomes
+  // the authoritative file filter — skip hiddenPaths and excludePatterns so
+  // the explorer sidebar cannot hide PR-relevant files.
+  if (scopeFiles.length === 0) {
+    // hiddenPaths filter (prefix-match semantics)
+    if (hiddenPaths.length > 0) {
+      const hSet = new Set(hiddenPaths)
+      nodes = nodes.filter((n) => !isHiddenByPath(n, hSet))
       nodeIds = new Set(nodes.map((n) => n.id))
     }
+
+    // excludePatterns filter
+    if (excludePatterns.trim()) {
+      const regexes = excludePatterns
+        .split(',')
+        .map(globToRegex)
+        .filter((r): r is RegExp => r !== null)
+      if (regexes.length > 0) {
+        nodes = nodes.filter((n) => {
+          const fp = n.filePath ?? ''
+          return !regexes.some((r) => r.test(fp))
+        })
+        nodeIds = new Set(nodes.map((n) => n.id))
+      }
+    }
+  }
+
+  // scopeFiles whitelist — when non-empty, only nodes in these files survive.
+  if (scopeFiles.length > 0) {
+    const scopeSet = new Set(scopeFiles)
+    nodes = nodes.filter((n) => {
+      const fp = n.filePath ?? ''
+      return scopeSet.has(fp)
+    })
+    nodeIds = new Set(nodes.map((n) => n.id))
   }
 
   // ── Phase 2: import node elevation ───────────────────────────────────────

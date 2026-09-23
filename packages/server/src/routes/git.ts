@@ -5,13 +5,17 @@
  *  GET  /api/git/branches           — list local branches
  *  GET  /api/git/commits            — list commits (?branch=X&limit=N)
  *  POST /api/git/diff               — compute ArchDiff between two commits (SSE stream)
+ *  GET  /api/git/pr-stack           — discover a stacked PR chain (?base=X&tip=Y)
+ *  POST /api/git/pr-stack/import    — import PR stack as proposed annotations
  *
  * All routes require a project to be open. They delegate to the git service
  * for basic queries and to the temporal mapper for snapshot extraction.
  */
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { computeArchDiff } from '@graphcoder/core'
+import simpleGit from 'simple-git'
+import { computeArchDiff, nodeSemanticId } from '@graphcoder/core'
+import { createAnnotation, saveAnnotation, loadAllAnnotations, ensureKind } from '@graphcoder/core/annotations/server'
 import { graphService } from '../codegraph/service.js'
 import { getGitGraph, getGitStatus, listBranches, listCommits, resolveRef } from '../git/index.js'
 import { getCachedDiff, setCachedDiff } from '../temporal/cache.js'
@@ -153,6 +157,246 @@ router.post('/git/diff', async (req: Request, res: Response) => {
   } catch (err) {
     sendEvent('error', { error: err instanceof Error ? err.message : 'Internal error' })
     res.end()
+  }
+})
+
+// ── PR Stack helpers ──────────────────────────────────────────────────────────
+
+interface PrSlice {
+  index: number
+  branch: string
+  title: string
+  /** Tip commit of this PR (the branch tip). */
+  commitHash: string
+  /** Base commit for diffing — the previous branch tip, or the stack base ref. */
+  baseCommitHash: string
+  parentBranch: string
+  files: string[]
+  stats: { additions: number; deletions: number }
+}
+
+/**
+ * Discover a stacked PR chain by finding branch tips between base..tip.
+ *
+ * 1. List all local branches whose tip commit lives on the base..tip path.
+ * 2. Sort them topologically (by their position in the commit walk).
+ * 3. Each PR spans from the previous branch tip to its own tip.
+ *
+ * Falls back to per-commit slices when no intermediate branches exist
+ * (e.g. a single branch with multiple commits).
+ */
+async function discoverPrStack(projectRoot: string, base: string, tip: string): Promise<PrSlice[]> {
+  const git = simpleGit(projectRoot)
+
+  // Resolve base and tip to full hashes.
+  const baseHash = (await git.revparse([base])).trim()
+  const tipHash = (await git.revparse([tip])).trim()
+
+  // Get every commit hash on the base..tip path (oldest first).
+  // NOTE: simple-git's log({ from, to }) does NOT produce the same result as
+  // `git log base..tip` — it includes merge-commit ancestors and side branches.
+  // Use git.raw() with the two-dot range to get the correct set.
+  const rawLog = await git.raw(['log', '--format=%H', `${baseHash}..${tipHash}`])
+  const commitHashes = rawLog
+    .trim()
+    .split('\n')
+    .filter((h) => h.length > 0)
+    .reverse() // oldest first
+  const commitOrder = new Map<string, number>()
+  for (let i = 0; i < commitHashes.length; i++) {
+    commitOrder.set(commitHashes[i], i)
+  }
+
+  // List all local branches and find those whose tip sits on this path.
+  // NOTE: simple-git's branch() has its own parser that chokes on --format.
+  // Use git.raw() and parse the "name hash" lines ourselves.
+  const rawBranches = await git.raw(['branch', '-l', '--format=%(refname:short) %(objectname)'])
+  const stackBranches: Array<{ name: string; hash: string; order: number }> = []
+
+  for (const line of rawBranches.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const spaceIdx = trimmed.lastIndexOf(' ')
+    if (spaceIdx < 0) continue
+    const name = trimmed.slice(0, spaceIdx)
+    const hash = trimmed.slice(spaceIdx + 1)
+    const order = commitOrder.get(hash)
+    if (order !== undefined) {
+      stackBranches.push({ name, hash, order })
+    }
+  }
+
+  // Also include tip branch if not already matched (e.g. detached HEAD pointing at tip).
+  if (!stackBranches.some((b) => b.hash === tipHash) && commitOrder.has(tipHash)) {
+    stackBranches.push({ name: tip, hash: tipHash, order: commitOrder.get(tipHash)! })
+  }
+
+  // Sort by topological position (earliest first).
+  stackBranches.sort((a, b) => a.order - b.order)
+
+  // Deduplicate branches pointing at the same commit (keep first name).
+  const seen = new Set<string>()
+  const dedupedBranches = stackBranches.filter((b) => {
+    if (seen.has(b.hash)) return false
+    seen.add(b.hash)
+    return true
+  })
+
+  // Build slices. Each PR = diff from previous branch tip to this branch tip.
+  // Fall back to per-commit slices when no intermediate branches found.
+  const boundaries =
+    dedupedBranches.length > 0
+      ? dedupedBranches
+      : commitHashes.map((hash, i) => ({
+          name: '',
+          hash,
+          order: i
+        }))
+
+  const slices: PrSlice[] = []
+  for (let i = 0; i < boundaries.length; i++) {
+    const boundary = boundaries[i]
+    const prevHash = i === 0 ? baseHash : boundaries[i - 1].hash
+    const prevName = i === 0 ? base : boundaries[i - 1].name
+
+    // Title: first commit message in this PR's range (oldest commit).
+    const rawRangeLog = await git.raw(['log', '--format=%s', '--reverse', `${prevHash}..${boundary.hash}`])
+    const firstMessage = rawRangeLog.trim().split('\n')[0] ?? ''
+    const title = firstMessage || boundary.name
+
+    const diffSummary = await git.diffSummary([`${prevHash}..${boundary.hash}`])
+
+    slices.push({
+      index: i + 1,
+      branch: boundary.name,
+      title,
+      commitHash: boundary.hash,
+      baseCommitHash: prevHash,
+      parentBranch: prevName,
+      files: diffSummary.files.map((f) => f.file),
+      stats: {
+        additions: diffSummary.insertions,
+        deletions: diffSummary.deletions
+      }
+    })
+  }
+  return slices
+}
+
+// ── GET /git/pr-stack ─────────────────────────────────────────────────────────
+
+router.get('/git/pr-stack', async (req: Request, res: Response) => {
+  if (!graphService.isOpen()) {
+    res.status(503).json({ error: 'No project open' })
+    return
+  }
+
+  const base = req.query.base as string | undefined
+  const tip = req.query.tip as string | undefined
+  if (!base || !tip) {
+    res.status(400).json({ error: 'Both base and tip query params required' })
+    return
+  }
+
+  try {
+    const projectRoot = graphService.getProjectRoot()
+    const slices = await discoverPrStack(projectRoot, base, tip)
+
+    // Enrich with graph node semantic IDs per slice
+    const { nodes } = graphService.getAllNodesAndEdges()
+    const nodesByFile = new Map<string, typeof nodes>()
+    for (const node of nodes) {
+      const fp = node.filePath
+      if (!fp) continue
+      const list = nodesByFile.get(fp) ?? []
+      list.push(node)
+      nodesByFile.set(fp, list)
+    }
+
+    const enriched = slices.map((slice) => {
+      const memberIds = new Set<string>()
+      for (const file of slice.files) {
+        for (const node of nodesByFile.get(file) ?? []) {
+          memberIds.add(nodeSemanticId(node))
+        }
+      }
+      return { ...slice, memberIds: [...memberIds] }
+    })
+
+    res.json({ prs: enriched })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to discover PR stack' })
+  }
+})
+
+// ── POST /git/pr-stack/import ────────────────────────────────────────────────
+
+router.post('/git/pr-stack/import', async (req: Request, res: Response) => {
+  if (!graphService.isOpen()) {
+    res.status(503).json({ error: 'No project open' })
+    return
+  }
+
+  const { base, tip } = req.body as { base?: string; tip?: string }
+  if (!base || !tip) {
+    res.status(400).json({ error: 'Both base and tip required in body' })
+    return
+  }
+
+  try {
+    const projectRoot = graphService.getProjectRoot()
+    const slices = await discoverPrStack(projectRoot, base, tip)
+
+    // Build file → semantic ID map
+    const { nodes } = graphService.getAllNodesAndEdges()
+    const nodesByFile = new Map<string, typeof nodes>()
+    for (const node of nodes) {
+      const fp = node.filePath
+      if (!fp) continue
+      const list = nodesByFile.get(fp) ?? []
+      list.push(node)
+      nodesByFile.set(fp, list)
+    }
+
+    // Register the 'pr' kind
+    ensureKind(projectRoot, 'pr')
+
+    // Check existing annotations to avoid duplicates
+    const existing = loadAllAnnotations(projectRoot)
+    const existingLabels = new Set(existing.map((a) => a.label))
+
+    const created = []
+    for (const slice of slices) {
+      const label = `PR${slice.index}: ${slice.title}`
+      if (existingLabels.has(label)) continue
+
+      const memberIds: string[] = []
+      const seen = new Set<string>()
+      for (const file of slice.files) {
+        for (const node of nodesByFile.get(file) ?? []) {
+          const sid = nodeSemanticId(node)
+          if (!seen.has(sid)) {
+            seen.add(sid)
+            memberIds.push(sid)
+          }
+        }
+      }
+
+      if (memberIds.length === 0) continue
+
+      const annotation = createAnnotation('region', label, memberIds, {
+        kind: 'pr',
+        description: `Commit ${slice.commitHash.slice(0, 8)}: ${slice.title}`,
+        status: 'proposed',
+        author: 'agent'
+      })
+      saveAnnotation(projectRoot, annotation)
+      created.push(annotation)
+    }
+
+    res.json({ created: created.length, annotations: created })
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to import PR stack' })
   }
 })
 

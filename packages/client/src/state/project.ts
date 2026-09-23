@@ -81,12 +81,16 @@ export async function openProject(projectRoot: string): Promise<void> {
  *
  * When both `base` and `target` appear in the URL, the git graph panel
  * opens automatically and a temporal diff starts after the project loads.
+ *
+ * When `prBase` and `prTip` appear, the PR stack loads automatically.
  */
 export async function initFromUrl(): Promise<void> {
   const params = new URLSearchParams(window.location.search)
   const projectParam = params.get('project')
   const baseParam = params.get('base')
   const targetParam = params.get('target')
+  const prBaseParam = params.get('prBase')
+  const prTipParam = params.get('prTip')
 
   if (projectParam) {
     await openProject(projectParam)
@@ -120,6 +124,26 @@ export async function initFromUrl(): Promise<void> {
     const { loadGitGraph, runTemporalDiff } = await import('./temporal.js')
     await loadGitGraph()
     await runTemporalDiff()
+  }
+
+  // Restore PR stack from URL.
+  if (prBaseParam && prTipParam && state.projectRoot) {
+    const { loadPrStack } = await import('./pr-stack.js')
+    await loadPrStack(prBaseParam, prTipParam)
+  }
+
+  // Restore flow view mode and traced flows from URL.
+  const viewParam = params.get('view')
+  const flowsParam = params.get('flows')
+  if (viewParam === 'flow' && state.projectRoot) {
+    const { setViewMode, traceFromEntryPoint } = await import('./flow.js')
+    setViewMode('flow')
+    if (flowsParam) {
+      const nodeIds = flowsParam.split(',').filter(Boolean)
+      for (const id of nodeIds) {
+        await traceFromEntryPoint(id)
+      }
+    }
   }
 }
 
@@ -184,7 +208,8 @@ export function connectWebSocket(): void {
             groupByContract: state.groupByContract,
             groupByPackage: state.groupByPackage,
             expandedGroups: state.expandedGroups,
-            focusedNodeId: state.focusedNodeId
+            focusedNodeId: state.focusedNodeId,
+            scopeFiles: state.scopeFiles
           } satisfies ViewParams
         })
       )
@@ -215,8 +240,9 @@ export function connectWebSocket(): void {
                 fileNodes: data.fileNodes ?? state.savedView!.fileNodes
               })
             })
+          } else if (state.viewMode === 'flow') {
+            if (data.fileNodes !== undefined) setState('fileNodes', data.fileNodes)
           } else {
-            // No diff active — update the live display directly.
             batch(() => {
               if (data.nodes !== undefined) setState('viewNodes', data.nodes)
               if (data.edges !== undefined) setState('viewEdges', data.edges)

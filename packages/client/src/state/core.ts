@@ -11,6 +11,10 @@ import type { SearchState } from './search.js'
 import type { SelectionState } from './selection.js'
 import type { AnnotationsState } from './annotations.js'
 import { annotationsInitial } from './annotations.js'
+import type { FlowState } from './flow.js'
+import { flowInitial } from './flow.js'
+import type { PrStackState } from './pr-stack.js'
+import { prStackInitial } from './pr-stack.js'
 import type { TemporalState } from './temporal.js'
 import { temporalInitial } from './temporal.js'
 
@@ -28,7 +32,10 @@ export type AppState = ProjectState &
   SearchState &
   HierarchyState &
   TemporalState &
-  AnnotationsState
+  AnnotationsState &
+  FlowState & {
+    prStack: PrStackState
+  }
 
 const _saved = loadFilters()
 const _savedHierarchy = loadHierarchy()
@@ -70,6 +77,7 @@ export const [state, setState] = createStore<AppState>({
   groupByPackage: _saved.groupByPackage ?? false,
   focusedNodeId: null,
   graphDirection: _saved.graphDirection ?? 'TB',
+  scopeFiles: [],
 
   // Diff
   baseSnapshot: null,
@@ -89,5 +97,11 @@ export const [state, setState] = createStore<AppState>({
   ...temporalInitial,
 
   // Annotations
-  ...annotationsInitial
+  ...annotationsInitial,
+
+  // Flow tracing
+  ...flowInitial,
+
+  // PR Stack
+  prStack: prStackInitial
 })
