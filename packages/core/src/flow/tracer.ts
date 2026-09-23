@@ -82,7 +82,7 @@ export function traceFlow(
   const resultEdges: GraphEdge[] = []
   const branches: Branch[] = []
 
-  function walk(nodeId: string, depth: number): void {
+  function walk(nodeId: string, depth: number, isEntry: boolean): void {
     if (depth > cfg.maxDepth) return
     if (visited.has(nodeId)) return
     visited.add(nodeId)
@@ -91,7 +91,7 @@ export function traceFlow(
     if (!node) return
     resultNodes.set(nodeId, node)
 
-    const outs = (outgoing.get(nodeId) ?? []).filter((e) => !noise.has(e.target) && nodeMap.has(e.target))
+    const outs = (outgoing.get(nodeId) ?? []).filter((e) => nodeMap.has(e.target) && (isEntry || !noise.has(e.target)))
 
     if (outs.length > 1) {
       branches.push({
@@ -102,11 +102,11 @@ export function traceFlow(
 
     for (const edge of outs) {
       resultEdges.push(edge)
-      walk(edge.target, depth + 1)
+      walk(edge.target, depth + 1, false)
     }
   }
 
-  walk(startNodeId, 0)
+  walk(startNodeId, 0, true)
 
   const incoming = buildIncoming(edges.filter((e) => WALK_EDGE_KINDS.has(e.kind)))
   for (const edge of incoming.get(startNodeId) ?? []) {

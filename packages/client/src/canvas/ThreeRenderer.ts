@@ -932,17 +932,22 @@ export class ThreeRenderer {
 
       // ── Node text ──────────────────────────────────────────────────────────
       const nameRaw = gn?.name ?? id
-      const nameTrunc = nameRaw.length > 18 ? `${nameRaw.slice(0, 16)}…` : nameRaw
       const badgeStr = kind ?? ''
 
       const textScale = 11 / 24
       const { cellH, advance } = this.atlas
       const displayH = cellH * textScale
 
+      const charAdv = advance * textScale
+      const padX = 8
+      const badgeReserve = badgeStr ? badgeStr.length * (advance * (8 / 24)) + 12 : 4
+      const maxChars = Math.max(3, Math.floor((ln.width - padX - badgeReserve) / charAdv))
+      const nameTrunc = nameRaw.length > maxChars ? `${nameRaw.slice(0, maxChars - 2)}..` : nameRaw
+
       // Name — left-aligned, vertically centred
       const nameColor: [number, number, number] = isDark ? [1, 1, 1] : [0.059, 0.09, 0.165]
       const nameY = ln.y + ln.height / 2 - displayH / 2
-      pushLabel(nameTrunc, ln.x + 8, nameY, 11, nameColor, 18)
+      pushLabel(nameTrunc, ln.x + padX, nameY, 11, nameColor, 20)
 
       // Badge — right-aligned, top of node
       if (badgeStr) {

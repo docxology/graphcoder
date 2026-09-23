@@ -137,29 +137,44 @@ describe('traceFlow', () => {
     expect(flow.branches[0]!.paths.map((p) => p[0]).sort()).toEqual(['b', 'c'])
   })
 
-  it('filters noise nodes by kind', () => {
-    const nodes = [node('a', 'function'), node('imp', 'import'), node('b', 'function')]
-    const edges = [edge('a', 'imp'), edge('a', 'b')]
+  it('filters noise nodes by kind (beyond entry)', () => {
+    const nodes = [node('a', 'function'), node('mid', 'function'), node('imp', 'import'), node('b', 'function')]
+    const edges = [edge('a', 'mid'), edge('mid', 'imp'), edge('mid', 'b')]
     const flow = traceFlow('a', nodes, edges)
     expect(flow.nodes.find((n) => n.id === 'imp')).toBeUndefined()
     expect(flow.nodes.find((n) => n.id === 'b')).toBeDefined()
   })
 
-  it('filters noise nodes by exclude pattern', () => {
+  it('entry point direct callees bypass noise filter', () => {
+    const nodes = [node('a', 'function'), node('imp', 'import'), node('b', 'function')]
+    const edges = [edge('a', 'imp'), edge('a', 'b')]
+    const flow = traceFlow('a', nodes, edges)
+    expect(flow.nodes.find((n) => n.id === 'imp')).toBeDefined()
+    expect(flow.nodes.find((n) => n.id === 'b')).toBeDefined()
+  })
+
+  it('filters noise nodes by exclude pattern (beyond entry)', () => {
     const nodes = [
       node('a', 'function', { filePath: 'src/main.ts' }),
+      node('mid', 'function', { filePath: 'src/mid.ts' }),
       node('b', 'function', { filePath: 'node_modules/lodash/index.js' })
     ]
-    const edges = [edge('a', 'b')]
+    const edges = [edge('a', 'mid'), edge('mid', 'b')]
     const flow = traceFlow('a', nodes, edges, {
       noiseFilter: { excludePatterns: ['node_modules/**'], excludeKinds: [], minFanIn: 0 }
     })
-    expect(flow.nodes).toHaveLength(1)
+    expect(flow.nodes.find((n) => n.id === 'b')).toBeUndefined()
   })
 
-  it('filters noise nodes by minFanIn', () => {
-    const nodes = [node('a', 'function'), node('hub', 'function'), node('c1', 'function'), node('c2', 'function')]
-    const edges = [edge('a', 'hub'), edge('c1', 'hub'), edge('c2', 'hub')]
+  it('filters noise nodes by minFanIn (beyond entry)', () => {
+    const nodes = [
+      node('a', 'function'),
+      node('mid', 'function'),
+      node('hub', 'function'),
+      node('c1', 'function'),
+      node('c2', 'function')
+    ]
+    const edges = [edge('a', 'mid'), edge('mid', 'hub'), edge('c1', 'hub'), edge('c2', 'hub')]
     const flow = traceFlow('a', nodes, edges, {
       noiseFilter: { excludePatterns: [], excludeKinds: [], minFanIn: 3 }
     })
