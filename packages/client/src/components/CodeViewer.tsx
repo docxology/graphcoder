@@ -41,7 +41,11 @@ function langFromPath(filePath: string | undefined): string {
   return EXT_TO_LANG[ext] ?? 'plaintext'
 }
 
-export const CodeViewer: Component<{ code: string; filePath?: string }> = (props) => {
+export const CodeViewer: Component<{
+  code: string
+  filePath?: string
+  onNavigate?: (symbol: string) => void
+}> = (props) => {
   let container!: HTMLDivElement
   let editor: monaco.editor.IStandaloneCodeEditor | undefined
 
@@ -65,6 +69,17 @@ export const CodeViewer: Component<{ code: string; filePath?: string }> = (props
       automaticLayout: true,
       padding: { top: 8, bottom: 8 },
       theme: document.documentElement.classList.contains('dark') ? 'vs-dark' : 'vs'
+    })
+
+    editor.onMouseDown((e) => {
+      if (!(e.event.metaKey || e.event.ctrlKey)) return
+      if (!props.onNavigate) return
+      const pos = e.target.position
+      if (!pos) return
+      const model = editor?.getModel()
+      if (!model) return
+      const word = model.getWordAtPosition(pos)
+      if (word) props.onNavigate(word.word)
     })
   })
 

@@ -1,6 +1,7 @@
 import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
-import { clearFocus, clearSelection, setFocus, state } from '../state/store.js'
+import { clearFocus, clearSelection, selectNode, setFocus, state } from '../state/store.js'
+import { searchNodes } from '../api/graph.js'
 import { CodeViewer } from './CodeViewer.js'
 import { readLayoutSize, ResizeHandle, saveLayoutSize } from './ResizeHandle.js'
 
@@ -16,6 +17,17 @@ import { readLayoutSize, ResizeHandle, saveLayoutSize } from './ResizeHandle.js'
 export const NodeInspector: Component = () => {
   const [collapsed, setCollapsed] = createSignal(false)
   const [expandedHeight, setExpandedHeight] = createSignal(readLayoutSize('inspectorHeight', 208))
+
+  const navigateToSymbol = async (symbol: string) => {
+    try {
+      const { results } = await searchNodes(symbol)
+      const exact = results.find((r) => r.node.name === symbol)
+      const target = exact ?? results[0]
+      if (target && target.node.id !== state.selectedNodeId) {
+        void selectNode(target.node.id)
+      }
+    } catch {}
+  }
 
   return (
     <div
@@ -144,7 +156,7 @@ export const NodeInspector: Component = () => {
                 {/* Right — source code */}
                 <Show when={detail().code}>
                   <div class="flex-1 overflow-hidden">
-                    <CodeViewer code={detail().code!} filePath={detail().node.filePath} />
+                    <CodeViewer code={detail().code!} filePath={detail().node.filePath} onNavigate={navigateToSymbol} />
                   </div>
                 </Show>
               </div>
