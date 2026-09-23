@@ -108,6 +108,14 @@ export function traceFlow(
 
   walk(startNodeId, 0)
 
+  const incoming = buildIncoming(edges.filter((e) => WALK_EDGE_KINDS.has(e.kind)))
+  for (const edge of incoming.get(startNodeId) ?? []) {
+    if (noise.has(edge.source) || !nodeMap.has(edge.source)) continue
+    if (resultNodes.has(edge.source)) continue
+    resultNodes.set(edge.source, nodeMap.get(edge.source)!)
+    resultEdges.push(edge)
+  }
+
   return {
     entryNodeId: startNodeId,
     nodes: [...resultNodes.values()],

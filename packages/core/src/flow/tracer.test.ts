@@ -173,6 +173,29 @@ describe('traceFlow', () => {
     expect(flow.edges).toHaveLength(0)
     expect(flow.branches).toHaveLength(0)
   })
+
+  it('includes direct callers of the entry point', () => {
+    const nodes = [node('caller', 'function'), node('route', 'route'), node('handler', 'function')]
+    const edges = [edge('caller', 'route'), edge('route', 'handler')]
+    const flow = traceFlow('route', nodes, edges)
+    expect(flow.nodes.map((n) => n.id).sort()).toEqual(['caller', 'handler', 'route'])
+    expect(flow.edges).toHaveLength(2)
+  })
+
+  it('does not recursively trace callers of callers', () => {
+    const nodes = [
+      node('grandparent', 'function'),
+      node('parent', 'function'),
+      node('entry', 'route'),
+      node('child', 'function')
+    ]
+    const edges = [edge('grandparent', 'parent'), edge('parent', 'entry'), edge('entry', 'child')]
+    const flow = traceFlow('entry', nodes, edges)
+    const ids = flow.nodes.map((n) => n.id).sort()
+    expect(ids).toContain('parent')
+    expect(ids).toContain('child')
+    expect(ids).not.toContain('grandparent')
+  })
 })
 
 // ── Reverse tracing ──────────────────────────────────────────────────────────

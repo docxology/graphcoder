@@ -148,13 +148,29 @@ export function recomputeFlowView(): void {
     }
   }
 
-  const nodes = [...nodeMap.values()]
+  const tracedNodes = [...nodeMap.values()]
 
-  if (nodes.length === 0) {
+  if (tracedNodes.length === 0) {
     setState('viewNodes', [])
     setState('viewEdges', [])
     setState('viewGroups', [])
     return
+  }
+
+  const fileByPath = new Map<string, GraphNode>()
+  for (const fn of state.fileNodes) {
+    fileByPath.set(fn.filePath, fn)
+  }
+
+  for (const node of tracedNodes) {
+    const fileNode = fileByPath.get(node.filePath)
+    if (!fileNode) continue
+    if (!nodeMap.has(fileNode.id)) nodeMap.set(fileNode.id, fileNode)
+    const key = `${fileNode.id}\x00${node.id}\x00contains`
+    if (!edgeSet.has(key)) {
+      edgeSet.add(key)
+      edges.push({ source: fileNode.id, target: node.id, kind: 'contains' })
+    }
   }
 
   const params: ViewParams = {
@@ -162,7 +178,7 @@ export function recomputeFlowView(): void {
     hiddenEdgeKinds: ['contains', 'exports'],
     hiddenPaths: [],
     excludePatterns: '',
-    expandedGroups: nodes.map((n) => n.filePath),
+    expandedGroups: tracedNodes.map((n) => n.filePath),
     groupByFile: true,
     groupByContract: false,
     groupByClass: false,
@@ -171,7 +187,7 @@ export function recomputeFlowView(): void {
     scopeFiles: []
   }
 
-  const result = computeView(nodes, edges, params)
+  const result = computeView([...nodeMap.values()], edges, params)
   setState('viewNodes', result.nodes)
   setState('viewEdges', result.edges)
   setState('viewGroups', result.groups)
