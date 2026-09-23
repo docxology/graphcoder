@@ -43,7 +43,7 @@ export { search } from './search.js'
 export type { SearchState } from './search.js'
 
 // Section: Selection
-export { clearSelection, selectNode } from './selection.js'
+export { canGoBack, canGoForward, clearSelection, goBack, goForward, selectNode } from './selection.js'
 export type { SelectionState } from './selection.js'
 
 // Section: Storage  (PersistedFilters lives here — it owns the serialisation schema)

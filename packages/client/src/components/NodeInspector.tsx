@@ -1,6 +1,16 @@
 import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
-import { clearFocus, clearSelection, selectNode, setFocus, state } from '../state/store.js'
+import {
+  canGoBack,
+  canGoForward,
+  clearFocus,
+  clearSelection,
+  goBack,
+  goForward,
+  selectNode,
+  setFocus,
+  state
+} from '../state/store.js'
 import { searchNodes } from '../api/graph.js'
 import { CodeViewer } from './CodeViewer.js'
 import { readLayoutSize, ResizeHandle, saveLayoutSize } from './ResizeHandle.js'
@@ -93,7 +103,26 @@ export const NodeInspector: Component = () => {
               </Show>
 
               <div class="ml-auto flex items-center gap-1 flex-shrink-0">
-                {/* Focus toggle */}
+                <button
+                  class="text-xs px-1.5 py-0.5 rounded text-gray-400 dark:text-gray-500
+                    hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700
+                    disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+                  disabled={!canGoBack()}
+                  onClick={() => void goBack()}
+                  title="Go back"
+                >
+                  ←
+                </button>
+                <button
+                  class="text-xs px-1.5 py-0.5 rounded text-gray-400 dark:text-gray-500
+                    hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700
+                    disabled:opacity-30 disabled:cursor-default disabled:hover:bg-transparent dark:disabled:hover:bg-transparent"
+                  disabled={!canGoForward()}
+                  onClick={() => void goForward()}
+                  title="Go forward"
+                >
+                  →
+                </button>
                 <button
                   class={`text-xs px-2 py-0.5 rounded border transition-colors ${
                     state.focusedNodeId === detail().node.id
