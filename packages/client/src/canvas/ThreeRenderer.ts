@@ -716,7 +716,7 @@ export class ThreeRenderer {
       const { glyphs, advance, refGlyphTop } = this.atlas
       const scale = fontSize / 24
       const displayAdv = advance * scale
-      const str = text.length > maxChars ? `…${text.slice(-(maxChars - 1))}` : text
+      const str = maxChars > 0 && text.length > maxChars ? `..${text.slice(-(maxChars - 2))}` : text
       let cx = x
       for (const ch of str) {
         if (gi >= MAX_GLYPHS) break
@@ -938,16 +938,10 @@ export class ThreeRenderer {
       const { cellH, advance } = this.atlas
       const displayH = cellH * textScale
 
-      const charAdv = advance * textScale
-      const padX = 8
-      const badgeReserve = badgeStr ? badgeStr.length * (advance * (8 / 24)) + 12 : 4
-      const maxChars = Math.max(3, Math.floor((ln.width - padX - badgeReserve) / charAdv))
-      const nameTrunc = nameRaw.length > maxChars ? `${nameRaw.slice(0, maxChars - 2)}..` : nameRaw
-
       // Name — left-aligned, vertically centred
       const nameColor: [number, number, number] = isDark ? [1, 1, 1] : [0.059, 0.09, 0.165]
       const nameY = ln.y + ln.height / 2 - displayH / 2
-      pushLabel(nameTrunc, ln.x + padX, nameY, 11, nameColor, 20)
+      pushLabel(nameRaw, ln.x + 8, nameY, 11, nameColor, 0)
 
       // Badge — right-aligned, top of node
       if (badgeStr) {

@@ -40,7 +40,7 @@ const LARGE_GRAPH_OVERRIDES: Record<string, string> = {
 
 const NODE_MIN_WIDTH = 120
 const NODE_CHAR_WIDTH = 7
-const NODE_PAD_X = 50
+const NODE_PAD_X = 80
 const NODE_HEIGHT = 40
 
 function nodeWidth(name: string): number {
