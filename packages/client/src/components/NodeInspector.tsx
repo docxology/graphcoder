@@ -1,6 +1,7 @@
 import type { Component } from 'solid-js'
 import { createSignal, Show } from 'solid-js'
 import { clearFocus, clearSelection, setFocus, state } from '../state/store.js'
+import { CodeViewer } from './CodeViewer.js'
 import { readLayoutSize, ResizeHandle, saveLayoutSize } from './ResizeHandle.js'
 
 // ── NodeInspector (bottom panel) ──────────────────────────────────────────────
@@ -142,10 +143,8 @@ export const NodeInspector: Component = () => {
 
                 {/* Right — source code */}
                 <Show when={detail().code}>
-                  <div class="flex-1 overflow-auto px-3 py-2" data-testid="code-preview">
-                    <pre class="text-xs font-mono text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                      {detail().code}
-                    </pre>
+                  <div class="flex-1 overflow-hidden">
+                    <CodeViewer code={detail().code!} filePath={detail().node.filePath} />
                   </div>
                 </Show>
               </div>
