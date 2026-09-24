@@ -16,6 +16,9 @@ import { isValidAnnotationId } from './store.js'
 const ANNOTATIONS_DIR = 'annotations'
 
 function conversationPath(projectRoot: string, annotationId: string): string {
+  if (!isValidAnnotationId(annotationId)) {
+    throw new Error(`Invalid annotation id: ${annotationId}`)
+  }
   return join(projectRoot, '.graphcoder', ANNOTATIONS_DIR, `${annotationId}.conversation.json`)
 }
 

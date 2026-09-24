@@ -28,6 +28,9 @@ export function isValidAnnotationId(id: string): boolean {
 }
 
 function annotationPath(projectRoot: string, id: string): string {
+  if (!isValidAnnotationId(id)) {
+    throw new Error(`Invalid annotation id: ${id}`)
+  }
   return join(annotationsDir(projectRoot), `${id}.json`)
 }
 
