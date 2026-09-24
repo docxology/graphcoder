@@ -10,6 +10,7 @@
 import type { ConversationLog, ConversationTurn } from './types.js'
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
+import { isValidAnnotationId } from './store.js'
 
 const ANNOTATIONS_DIR = 'annotations'
 
@@ -19,6 +20,7 @@ function conversationPath(projectRoot: string, annotationId: string): string {
 
 /** Load a conversation log for an annotation. Returns null when no conversation exists. */
 export function loadConversation(projectRoot: string, annotationId: string): ConversationLog | null {
+  if (!isValidAnnotationId(annotationId)) return null
   const filePath = conversationPath(projectRoot, annotationId)
   if (!existsSync(filePath)) return null
   try {
@@ -59,9 +61,9 @@ export function appendTurn(projectRoot: string, annotationId: string, turn: Conv
   saveConversation(projectRoot, log)
   return log
 }
-
 /** Delete a conversation file. Returns true when the file existed. */
 export function deleteConversation(projectRoot: string, annotationId: string): boolean {
+  if (!isValidAnnotationId(annotationId)) return false
   const filePath = conversationPath(projectRoot, annotationId)
   if (!existsSync(filePath)) return false
   unlinkSync(filePath)
