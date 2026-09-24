@@ -9,6 +9,7 @@
  */
 import type { ConversationLog, ConversationTurn } from './types.js'
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { isValidAnnotationId } from './store.js'
 
@@ -33,6 +34,9 @@ export function loadConversation(projectRoot: string, annotationId: string): Con
 
 /** Save (overwrite) a conversation log to disk. */
 export function saveConversation(projectRoot: string, log: ConversationLog): void {
+  if (!isValidAnnotationId(log.annotationId)) {
+    log.annotationId = randomUUID()
+  }
   const filePath = conversationPath(projectRoot, log.annotationId)
   writeFileSync(filePath, JSON.stringify(log, null, 2) + '\n', 'utf-8')
 }
@@ -53,6 +57,9 @@ export function createConversation(
 
 /** Append a turn to an existing conversation and persist. */
 export function appendTurn(projectRoot: string, annotationId: string, turn: ConversationTurn): ConversationLog {
+  if (!isValidAnnotationId(annotationId)) {
+    throw new Error(`Invalid annotation id: ${annotationId}`)
+  }
   let log = loadConversation(projectRoot, annotationId)
   if (!log) {
     log = createConversation(annotationId, 'unknown')
